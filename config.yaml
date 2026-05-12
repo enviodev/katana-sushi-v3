@@ -1,0 +1,94 @@
+# yaml-language-server: $schema=./node_modules/envio/evm.schema.json
+name: katana-sushi-v3
+rollback_on_reorg: true
+
+contracts:
+  - name: UniswapV3Factory
+    events:
+      - event: PoolCreated(address indexed token0, address indexed token1, uint24 indexed fee, int24 tickSpacing, address pool)
+
+  - name: NonfungiblePositionManager
+    events:
+      - event: IncreaseLiquidity(uint256 indexed tokenId, uint128 liquidity, uint256 amount0, uint256 amount1)
+        field_selection:
+          transaction_fields:
+            - hash
+            - gasPrice
+            - from
+      - event: DecreaseLiquidity(uint256 indexed tokenId, uint128 liquidity, uint256 amount0, uint256 amount1)
+        field_selection:
+          transaction_fields:
+            - hash
+            - gasPrice
+            - from
+      - event: Collect(uint256 indexed tokenId, address recipient, uint256 amount0, uint256 amount1)
+        field_selection:
+          transaction_fields:
+            - hash
+            - gasPrice
+            - from
+      - event: Transfer(address indexed from, address indexed to, uint256 indexed tokenId)
+        field_selection:
+          transaction_fields:
+            - hash
+            - gasPrice
+            - from
+
+  - name: UniswapV3Pool
+    events:
+      - event: Initialize(uint160 sqrtPriceX96, int24 tick)
+      - event: Swap(address indexed sender, address indexed recipient, int256 amount0, int256 amount1, uint160 sqrtPriceX96, uint128 liquidity, int24 tick)
+        field_selection:
+          transaction_fields:
+            - hash
+            - gasPrice
+            - from
+      - event: Mint(address sender, address indexed owner, int24 indexed tickLower, int24 indexed tickUpper, uint128 amount, uint256 amount0, uint256 amount1)
+        field_selection:
+          transaction_fields:
+            - hash
+            - gasPrice
+            - from
+      - event: Burn(address indexed owner, int24 indexed tickLower, int24 indexed tickUpper, uint128 amount, uint256 amount0, uint256 amount1)
+        field_selection:
+          transaction_fields:
+            - hash
+            - gasPrice
+            - from
+      - event: Flash(address indexed sender, address indexed recipient, uint256 amount0, uint256 amount1, uint256 paid0, uint256 paid1)
+        field_selection:
+          transaction_fields:
+            - hash
+            - gasPrice
+            - from
+      - event: Collect(address indexed owner, address recipient, int24 indexed tickLower, int24 indexed tickUpper, uint128 amount0, uint128 amount1)
+        field_selection:
+          transaction_fields:
+            - hash
+            - gasPrice
+            - from
+      - event: CollectProtocol(address indexed sender, address indexed recipient, uint128 amount0, uint128 amount1)
+        field_selection:
+          transaction_fields:
+            - hash
+            - gasPrice
+            - from
+      - event: SetFeeProtocol(uint8 feeProtocol0Old, uint8 feeProtocol1Old, uint8 feeProtocol0New, uint8 feeProtocol1New)
+        field_selection:
+          transaction_fields:
+            - hash
+
+chains:
+  # Katana mainnet
+  - id: 747474
+    start_block: 1858972
+    hypersync_config:
+      url: https://747474.hypersync.xyz
+    contracts:
+      - name: UniswapV3Factory
+        address:
+          - 0x203e8740894c8955cb8950759876d7e7e45e04c1
+      - name: NonfungiblePositionManager
+        address:
+          - 0x2659c6085d26144117d904c46b48b6d180393d27
+      - name: UniswapV3Pool
