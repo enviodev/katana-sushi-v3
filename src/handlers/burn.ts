@@ -2,6 +2,7 @@
 // We only adjust pool liquidity (if in range) and tick entities.
 import { indexer, type Burn } from "envio";
 import { FACTORY_ADDRESS, ONE_BI } from "../utils/constants.js";
+import { calculateAmountUSD } from "../utils/pricing.js";
 import { convertTokenToDecimal } from "../utils/index.js";
 import {
   updatePoolDayData,
@@ -40,9 +41,13 @@ indexer.onEvent(
 
     const amount0 = convertTokenToDecimal(event.params.amount0, token0RO.decimals);
     const amount1 = convertTokenToDecimal(event.params.amount1, token1RO.decimals);
-    const amountUSD = amount0
-      .times(token0RO.derivedETH.times(bundleRO.ethPriceUSD))
-      .plus(amount1.times(token1RO.derivedETH.times(bundleRO.ethPriceUSD)));
+    const amountUSD = calculateAmountUSD(
+      amount0,
+      amount1,
+      token0RO.derivedETH,
+      token1RO.derivedETH,
+      bundleRO.ethPriceUSD,
+    );
 
     let newLiquidity = poolRO.liquidity;
     if (

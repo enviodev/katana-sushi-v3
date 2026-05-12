@@ -1,6 +1,6 @@
 import { BigDecimal, type Bundle, type EvmOnEventContext, type Token } from "envio";
 import { ONE_BD, Q192, ZERO_BD, ZERO_BI } from "./constants.js";
-import { exponentToBigDecimal, isAddressInList, safeDiv } from "./index.js";
+import { clampBD, exponentToBigDecimal, isAddressInList, safeDiv } from "./index.js";
 
 export function sqrtPriceX96ToTokenPrices(
   sqrtPriceX96: bigint,
@@ -9,12 +9,19 @@ export function sqrtPriceX96ToTokenPrices(
 ): [BigDecimal, BigDecimal] {
   const num = new BigDecimal((sqrtPriceX96 * sqrtPriceX96).toString());
   const denom = new BigDecimal(Q192.toString());
+  // .dp(4) caps fractional-digit growth so chained multiplications downstream
+  // don't blow up arbitrary-precision BigDecimal internals — matches the
+  // reference Uniswap V3 indexer's behaviour.
   const price1 = num
     .div(denom)
     .times(exponentToBigDecimal(token0.decimals))
-    .div(exponentToBigDecimal(token1.decimals));
+    .div(exponentToBigDecimal(token1.decimals))
+    .dp(4);
   const price0 = safeDiv(ONE_BD, price1);
-  return [price0, price1];
+  // Clamp magnitude — a pool initialised with extreme sqrtPriceX96 can produce
+  // prices many orders past anything realistic, which then poisons every
+  // downstream derivedETH and amountUSD.
+  return [clampBD(price0), clampBD(price1)];
 }
 
 export async function getNativePriceInUSD(
@@ -24,7 +31,7 @@ export async function getNativePriceInUSD(
 ): Promise<BigDecimal> {
   const pool = await context.Pool.get(stablecoinWrappedNativePoolId.toLowerCase());
   if (!pool) return ZERO_BD;
-  return stablecoinIsToken0 ? pool.token0Price : pool.token1Price;
+  return clampBD(stablecoinIsToken0 ? pool.token0Price : pool.token1Price);
 }
 
 export async function findNativePerToken(
@@ -72,7 +79,7 @@ export async function findNativePerToken(
       }
     }
   }
-  return priceSoFar;
+  return clampBD(priceSoFar);
 }
 
 export function getTrackedAmountUSD(
@@ -90,13 +97,13 @@ export function getTrackedAmountUSD(
   const t1White = isAddressInList(token1.id, whitelistTokens);
 
   if (t0White && t1White) {
-    return amount0.times(price0USD).plus(amount1.times(price1USD));
+    return clampBD(amount0.times(price0USD).plus(amount1.times(price1USD)));
   }
   if (t0White && !t1White) {
-    return amount0.times(price0USD).times(new BigDecimal("2"));
+    return clampBD(amount0.times(price0USD).times(new BigDecimal("2")));
   }
   if (!t0White && t1White) {
-    return amount1.times(price1USD).times(new BigDecimal("2"));
+    return clampBD(amount1.times(price1USD).times(new BigDecimal("2")));
   }
   return ZERO_BD;
 }
@@ -108,7 +115,9 @@ export function calculateAmountUSD(
   t1DerivedETH: BigDecimal,
   ethPriceUSD: BigDecimal,
 ): BigDecimal {
-  return amount0
-    .times(t0DerivedETH.times(ethPriceUSD))
-    .plus(amount1.times(t1DerivedETH.times(ethPriceUSD)));
+  return clampBD(
+    amount0
+      .times(t0DerivedETH.times(ethPriceUSD))
+      .plus(amount1.times(t1DerivedETH.times(ethPriceUSD))),
+  );
 }

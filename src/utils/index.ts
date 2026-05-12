@@ -1,5 +1,14 @@
 import { BigDecimal } from "envio";
-import { ZERO_BD, ZERO_BI } from "./constants.js";
+import { MAX_BD, ZERO_BD, ZERO_BI } from "./constants.js";
+
+// Returns the value if its magnitude is within bounds, ZERO_BD otherwise.
+// Use at every BigDecimal write boundary that could be polluted by upstream
+// pricing math — sqrtPriceX96 on a misconfigured pool can produce token prices
+// many orders of magnitude past anything realistic, which then cascades through
+// derivedETH and amountUSD computations until Postgres rejects the insert.
+export function clampBD(x: BigDecimal): BigDecimal {
+  return x.abs().gt(MAX_BD) ? ZERO_BD : x;
+}
 
 export function isAddressInList(address: string, list: string[]): boolean {
   const a = address.toLowerCase();
