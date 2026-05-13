@@ -7,16 +7,19 @@ import { MAX_BD, ZERO_BD, ZERO_BI } from "./constants.js";
 //      pricing math on a misconfigured pool produces absurd derivedETH /
 //      amountUSD values that would cascade through every downstream write.
 //
-//   2. Scale (fractional digits) — values are truncated to BD_DECIMAL_PLACES
-//      decimals. bignumber.js multiplications compound fractional digits, so
-//      a chain like `amount × derivedETH × ethPriceUSD × …` can accumulate
-//      thousands of decimal places. Postgres rejects unconstrained `numeric`
-//      values with scale > 16383 with the "value overflows numeric format"
-//      error — exactly the failure we're guarding against.
-const BD_DECIMAL_PLACES = 18;
+//   2. Significant figures — values are rounded to BD_SIGNIFICANT_FIGURES sig
+//      figs (NOT decimal places). bignumber.js multiplications compound
+//      fractional digits, so a chain like `amount × derivedETH × ethPriceUSD
+//      × …` can accumulate thousands of decimal places, breaching Postgres's
+//      ~16,383-scale ceiling on `numeric` and triggering "value overflows
+//      numeric format". Capping by significant figures keeps the magnitude-
+//      relative precision intact (a price of 0.0004345 stays as 0.0004345
+//      rather than being truncated to 0.0004 the way decimal-place rounding
+//      would do — the latter caused an 8% bias on prices < 1).
+const BD_SIGNIFICANT_FIGURES = 20;
 export function clampBD(x: BigDecimal): BigDecimal {
   if (x.abs().gt(MAX_BD)) return ZERO_BD;
-  return x.dp(BD_DECIMAL_PLACES);
+  return x.precision(BD_SIGNIFICANT_FIGURES);
 }
 
 export function isAddressInList(address: string, list: string[]): boolean {

@@ -9,18 +9,18 @@ export function sqrtPriceX96ToTokenPrices(
 ): [BigDecimal, BigDecimal] {
   const num = new BigDecimal((sqrtPriceX96 * sqrtPriceX96).toString());
   const denom = new BigDecimal(Q192.toString());
-  // .dp(4) caps fractional-digit growth so chained multiplications downstream
-  // don't blow up arbitrary-precision BigDecimal internals — matches the
-  // reference Uniswap V3 indexer's behaviour.
+  // No .dp(N) here: the reference Uniswap indexer applies .dp(4) at this
+  // point but it catastrophically rounds prices < 1 (e.g. 0.000434 → 0.0004),
+  // producing an 8% bias on every ETH/USD figure downstream. We instead rely
+  // on clampBD's .precision(20) to cap growth at the entity-write boundary.
   const price1 = num
     .div(denom)
     .times(exponentToBigDecimal(token0.decimals))
-    .div(exponentToBigDecimal(token1.decimals))
-    .dp(4);
+    .div(exponentToBigDecimal(token1.decimals));
   const price0 = safeDiv(ONE_BD, price1);
-  // Clamp magnitude — a pool initialised with extreme sqrtPriceX96 can produce
-  // prices many orders past anything realistic, which then poisons every
-  // downstream derivedETH and amountUSD.
+  // Clamp magnitude + sig figs — a pool initialised with extreme sqrtPriceX96
+  // can produce prices many orders past anything realistic, which then poisons
+  // every downstream derivedETH and amountUSD.
   return [clampBD(price0), clampBD(price1)];
 }
 
