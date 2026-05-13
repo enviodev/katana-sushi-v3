@@ -27,39 +27,35 @@ GraphQL endpoint: `http://localhost:8080/v1/graphql`.
 
 `ENVIO_DRPC_API_KEY` is used by the Effect API for:
 - Token metadata (`name`, `symbol`, `decimals`, `totalSupply`)
-- `pool.feeGrowthGlobal0X128/1X128` reads on Swap and Flash *(only if `ENVIO_FETCH_FEE_GROWTH=true`)*
-- `pool.ticks(tickIdx)` reads on Mint/Burn and during swap tick crossings *(only if `ENVIO_FETCH_FEE_GROWTH=true`)*
+- `pool.feeGrowthGlobal0X128/1X128` reads on Swap and Flash *(when `ENVIO_FETCH_FEE_GROWTH` is on, which is the default)*
+- `pool.ticks(tickIdx)` reads on Mint/Burn and during swap tick crossings *(same gate)*
+- `positionManager.positions(tokenId)` reads on Increase/Decrease/Collect for `feeGrowthInside*LastX128` *(same gate)*
 
 If `ENVIO_DRPC_API_KEY` is unset, the client falls back to `ENVIO_KATANA_RPC_URL`
 (or the public Katana RPC). dRPC is recommended for backfill throughput.
 
 ### Fee-growth flag
 
-`ENVIO_FETCH_FEE_GROWTH` (default: off) controls whether the indexer makes
-per-swap and per-mint/burn RPC calls to populate the Uniswap V3 fee-growth
-fixed-point fields:
+`ENVIO_FETCH_FEE_GROWTH` (**default: on**) controls whether the indexer makes
+per-event RPC calls to populate the Uniswap V3 fee-growth fixed-point fields:
 
 - `Pool.feeGrowthGlobal0X128 / 1X128`
 - `Tick.feeGrowthOutside0X128 / 1X128`
+- `Position.feeGrowthInside0LastX128 / 1X128`
 - `PoolDayData.feeGrowthGlobal0X128 / 1X128`
 - `PoolHourData.feeGrowthGlobal0X128 / 1X128`
 - `TickDayData.feeGrowthOutside0X128 / 1X128`
-- `Position.feeGrowthInside0LastX128 / 1X128`
 
-These values are only meaningful to consumers doing LP-fee accounting (the
-standard `feeGrowthInside = feeGrowthGlobal − feeGrowthOutsideLower − feeGrowthOutsideUpper`
-formula for computing fees earned by a position between two blocks). All other
-data — pools, swaps, mints, burns, positions, TVL, volume, prices — is
-unaffected by this flag.
+These values are required for the standard LP-fee formula
+`feeGrowthInside = feeGrowthGlobal − feeGrowthOutsideLower − feeGrowthOutsideUpper`
+that consumers use to compute fees earned by a position between two blocks. All
+other data — pools, swaps, mints, burns, position metadata, TVL, volume,
+prices — is unaffected by this flag.
 
 | Mode | Behavior | Backfill speed |
 |---|---|---|
-| Default (unset / false) | Fields stay at `0`. No RPC for fee growth. | ~10× faster |
-| `ENVIO_FETCH_FEE_GROWTH=true` | Fields populated via RPC on every swap, flash, mint, burn, and tick crossing. | RPC-bound |
-
-`Position.feeGrowthInside*LastX128` always stays at `0` — those would require
-the same RPC pipeline and we replaced the `positions(tokenId)` call with an
-event-correlation approach (see "Position metadata" below).
+| Default (unset / `true`) | Fee-growth fields populated via RPC on every swap, flash, mint, burn, tick crossing, and LP NFT event. | RPC-bound |
+| `ENVIO_FETCH_FEE_GROWTH=false` | Fee-growth fields stay at `0`. No RPC calls for fee growth. | ~10× faster |
 
 ### Position metadata
 

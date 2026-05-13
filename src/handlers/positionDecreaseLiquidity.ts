@@ -5,6 +5,7 @@ import { loadOrCreateTransaction } from "../utils/transaction.js";
 import {
   getOrCreatePosition,
   savePositionSnapshot,
+  updateFeeVars,
 } from "./positionHelpers.js";
 
 indexer.onEvent(
@@ -33,13 +34,14 @@ indexer.onEvent(
       bundle.ethPriceUSD,
     );
 
-    const position = {
+    let position = {
       ...initial,
       liquidity: initial.liquidity - event.params.liquidity,
       withdrawnToken0: initial.withdrawnToken0.plus(amount0),
       withdrawnToken1: initial.withdrawnToken1.plus(amount1),
       amountWithdrawnUSD: initial.amountWithdrawnUSD.plus(newWithdrawUSD),
     };
+    position = await updateFeeVars(context, position, tokenId, event.block.number);
     context.Position.set(position);
 
     const decrease: DecreaseEvent = {

@@ -7,6 +7,7 @@ import { loadOrCreateTransaction } from "../utils/transaction.js";
 import {
   getOrCreatePosition,
   savePositionSnapshot,
+  updateFeeVars,
 } from "./positionHelpers.js";
 
 indexer.onEvent(
@@ -39,7 +40,7 @@ indexer.onEvent(
       bundle.ethPriceUSD,
     );
 
-    const position = {
+    let position = {
       ...initial,
       collectedToken0: newCollected0,
       collectedToken1: newCollected1,
@@ -47,6 +48,7 @@ indexer.onEvent(
       collectedFeesToken1: newCollected1.minus(initial.withdrawnToken1),
       amountCollectedUSD: initial.amountCollectedUSD.plus(newCollectUSD),
     };
+    position = await updateFeeVars(context, position, tokenId, event.block.number);
     context.Position.set(position);
     savePositionSnapshot(context, position, event, tx);
   },

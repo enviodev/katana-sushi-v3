@@ -12,6 +12,8 @@
 import type { EvmOnEventContext, Position, PositionSnapshot, Transaction } from "envio";
 import { getChainConfig } from "../utils/chains.js";
 import { ADDRESS_ZERO, ZERO_BD, ZERO_BI } from "../utils/constants.js";
+import { FETCH_FEE_GROWTH } from "../utils/flags.js";
+import { getPositionFeeGrowth } from "../effects/positionFeeGrowth.js";
 
 export type PositionEvent = {
   block: { number: number; timestamp: number };
@@ -81,6 +83,30 @@ export async function getOrCreatePosition(
     // feeGrowthInside is intentionally left at zero — see file header.
     feeGrowthInside0LastX128: ZERO_BI,
     feeGrowthInside1LastX128: ZERO_BI,
+  };
+}
+
+// Refresh feeGrowthInside0/1LastX128 via RPC. Gated on ENVIO_FETCH_FEE_GROWTH
+// (default on) — when disabled, the fields stay at whatever they were set to
+// on Position creation (typically zero).
+export async function updateFeeVars(
+  context: EvmOnEventContext,
+  position: Position,
+  tokenId: bigint,
+  blockNumber: number,
+): Promise<Position> {
+  if (!FETCH_FEE_GROWTH) return position;
+  const cfg = getChainConfig(context.chain.id);
+  const info = await context.effect(getPositionFeeGrowth, {
+    positionManager: cfg.positionManagerAddress,
+    tokenId: tokenId.toString(),
+    blockNumber,
+  });
+  if (!info) return position;
+  return {
+    ...position,
+    feeGrowthInside0LastX128: BigInt(info.feeGrowthInside0LastX128),
+    feeGrowthInside1LastX128: BigInt(info.feeGrowthInside1LastX128),
   };
 }
 
