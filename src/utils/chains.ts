@@ -60,7 +60,10 @@ export const KATANA_CONFIG: ChainConfig = {
   positionManagerAddress: "0x2659c6085d26144117d904c46b48b6d180393d27",
   wrappedNativeAddress: NATIVE_ADDRESS,
   stablecoinWrappedNativePoolId: "0x105f833d8522f33d8dc3e9599455e9412b63d049",
-  stablecoinIsToken0: false,
+  // Verified empirically: token0 of the WETH/USDC 0.03% native price pool is
+  // vbUSDC (decimals 6), token1 is vbETH (decimals 18). So the stablecoin is
+  // at the token0 slot → read pool.token0Price as ETH/USD.
+  stablecoinIsToken0: true,
   minimumNativeLocked: new BigDecimal("0.5"),
   stablecoinAddresses: [vbUSDC, vbUSDT, vbUSDS, AUSD, bvUSD, FRXUSD],
   whitelistTokens: [

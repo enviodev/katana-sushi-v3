@@ -1,13 +1,22 @@
 import { BigDecimal } from "envio";
 import { MAX_BD, ZERO_BD, ZERO_BI } from "./constants.js";
 
-// Returns the value if its magnitude is within bounds, ZERO_BD otherwise.
-// Use at every BigDecimal write boundary that could be polluted by upstream
-// pricing math — sqrtPriceX96 on a misconfigured pool can produce token prices
-// many orders of magnitude past anything realistic, which then cascades through
-// derivedETH and amountUSD computations until Postgres rejects the insert.
+// Sanitises a BigDecimal for safe Postgres `numeric` insertion. Two checks:
+//
+//   1. Magnitude — values past MAX_BD are zeroed. Catches the case where
+//      pricing math on a misconfigured pool produces absurd derivedETH /
+//      amountUSD values that would cascade through every downstream write.
+//
+//   2. Scale (fractional digits) — values are truncated to BD_DECIMAL_PLACES
+//      decimals. bignumber.js multiplications compound fractional digits, so
+//      a chain like `amount × derivedETH × ethPriceUSD × …` can accumulate
+//      thousands of decimal places. Postgres rejects unconstrained `numeric`
+//      values with scale > 16383 with the "value overflows numeric format"
+//      error — exactly the failure we're guarding against.
+const BD_DECIMAL_PLACES = 18;
 export function clampBD(x: BigDecimal): BigDecimal {
-  return x.abs().gt(MAX_BD) ? ZERO_BD : x;
+  if (x.abs().gt(MAX_BD)) return ZERO_BD;
+  return x.dp(BD_DECIMAL_PLACES);
 }
 
 export function isAddressInList(address: string, list: string[]): boolean {
@@ -37,7 +46,8 @@ export function convertTokenToDecimal(
   decimals: bigint,
 ): BigDecimal {
   const v = new BigDecimal(tokenAmount.toString());
-  return decimals === ZERO_BI ? v : v.div(exponentToBigDecimal(decimals));
+  const result = decimals === ZERO_BI ? v : v.div(exponentToBigDecimal(decimals));
+  return clampBD(result);
 }
 
 // Float-based fast power for non-integer bases. Mirrors the reference
