@@ -84,6 +84,9 @@ chains:
     start_block: 1858972
     hypersync_config:
       url: https://747474.hypersync.xyz
+    rpc:
+      - url: ${ENVIO_KATANA_RPC_URL:-https://rpc.katana.network}
+        for: fallback
     contracts:
       - name: UniswapV3Factory
         address:

@@ -2,13 +2,8 @@ import { createPublicClient, http, type Chain, type PublicClient } from "viem";
 
 // Single Katana RPC client used by all effects.
 //
-// Prefer dRPC when ENVIO_DRPC_API_KEY is set (better rate limits, batching).
-// Fall back to ENVIO_KATANA_RPC_URL or a public endpoint otherwise.
+// Reads ENVIO_KATANA_RPC_URL; falls back to the public Katana RPC if unset.
 function buildRpcUrl(): string {
-  const drpcKey = process.env.ENVIO_DRPC_API_KEY;
-  if (drpcKey) {
-    return `https://lb.drpc.org/ogrpc?network=katana&dkey=${drpcKey}`;
-  }
   return process.env.ENVIO_KATANA_RPC_URL || "https://rpc.katana.network";
 }
 

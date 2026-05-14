@@ -16,7 +16,7 @@ downstream consumers can swap GraphQL endpoints without changes.
 
 ```sh
 pnpm install
-cp .env.example .env   # fill in ENVIO_API_TOKEN and ENVIO_DRPC_API_KEY
+cp .env.example .env   # fill in ENVIO_API_TOKEN and ENVIO_KATANA_RPC_URL
 pnpm envio codegen
 pnpm envio dev
 ```
@@ -25,14 +25,16 @@ GraphQL endpoint: `http://localhost:8080/v1/graphql`.
 
 `ENVIO_API_TOKEN` is mandatory for HyperSync (free at <https://envio.dev>).
 
-`ENVIO_DRPC_API_KEY` is used by the Effect API for:
+`ENVIO_KATANA_RPC_URL` is the Katana RPC endpoint used by the Effect API for:
 - Token metadata (`name`, `symbol`, `decimals`, `totalSupply`)
 - `pool.feeGrowthGlobal0X128/1X128` reads on Swap and Flash *(when `ENVIO_FETCH_FEE_GROWTH` is on, which is the default)*
 - `pool.ticks(tickIdx)` reads on Mint/Burn and during swap tick crossings *(same gate)*
 - `positionManager.positions(tokenId)` reads on Increase/Decrease/Collect for `feeGrowthInside*LastX128` *(same gate)*
 
-If `ENVIO_DRPC_API_KEY` is unset, the client falls back to `ENVIO_KATANA_RPC_URL`
-(or the public Katana RPC). dRPC is recommended for backfill throughput.
+The same URL is wired into `config.yaml` as a fallback RPC source for the
+indexer itself (HyperSync remains the primary data source). If unset, both
+paths fall back to the public Katana RPC; a dedicated provider (e.g. dRPC,
+Alchemy, Ankr) is recommended for backfill throughput.
 
 ### Fee-growth flag
 
