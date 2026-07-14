@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "envio dev",
     "start": "envio start",
-    "test": "vitest run"
+    "test": "vitest run --passWithNoTests",
+    "codegen": "envio codegen"
   },
   "devDependencies": {
     "@types/node": "^24.12.2",
@@ -13,7 +14,7 @@
     "vitest": "^4.1.0"
   },
   "dependencies": {
-    "envio": "3.0.0-rc.0",
+    "envio": "3.2.1",
     "viem": "^2.47.6"
   },
   "engines": {
