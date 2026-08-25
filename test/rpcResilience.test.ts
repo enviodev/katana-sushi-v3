@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { BaseError, HttpRequestError, parseAbi } from "viem";
+import {
+  BaseError,
+  HttpRequestError,
+  createPublicClient,
+  getAddress,
+  http,
+  parseAbi,
+} from "viem";
 
 import { isRevert, withRetry } from "../src/effects/client.js";
 
@@ -79,6 +86,47 @@ describe("withRetry", () => {
     ).rejects.toThrow();
     expect(attempts).toBe(1);
   });
+});
+
+// Live checks against the public Katana RPC. Gated so `npm test` stays hermetic;
+// run with KATANA_TEST_LIVE=1. These pin the two error shapes a real contract
+// produces, because misclassifying either would be its own crash loop: a revert
+// wrongly treated as transport error retries six times and then throws.
+describe.runIf(process.env.KATANA_TEST_LIVE)("isRevert against live reverts", () => {
+  const NPM = getAddress("0x2659c6085d26144117d904c46b48b6d180393d27");
+  const katana = {
+    id: 747474,
+    name: "Katana",
+    nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+    rpcUrls: { default: { http: ["https://rpc.katana.network"] } },
+  } as const;
+  const client = createPublicClient({
+    chain: katana,
+    transport: http("https://rpc.katana.network"),
+  });
+  const posAbi = parseAbi([
+    "function positions(uint256) view returns (uint96,address,address,address,uint24,int24,int24,uint128,uint256,uint256,uint128,uint128)",
+  ]);
+
+  it("classifies a reverting call as a revert (ContractFunctionRevertedError)", async () => {
+    const err = await client
+      .readContract({ address: NPM, abi: posAbi, functionName: "positions", args: [999999999n] })
+      .then(() => null, (e) => e);
+    expect(err).not.toBeNull();
+    expect(isRevert(err)).toBe(true);
+  }, 30_000);
+
+  it("classifies a call to an address with no code as a revert (ZeroData)", async () => {
+    const err = await client
+      .readContract({
+        address: getAddress("0x000000000000000000000000000000000000dead"),
+        abi: parseAbi(["function decimals() view returns (uint8)"]),
+        functionName: "decimals",
+      })
+      .then(() => null, (e) => e);
+    expect(err).not.toBeNull();
+    expect(isRevert(err)).toBe(true);
+  }, 30_000);
 });
 
 // Live integration check. Point KATANA_TEST_DEAD_RPC at an endpoint that is

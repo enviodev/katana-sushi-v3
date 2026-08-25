@@ -13,7 +13,11 @@ const POSITION_ABI = parseAbi([
 // (e.g. BancorSwap-style flows), so callers must handle null gracefully.
 export const getPositionFeeGrowth = createEffect(
   {
-    name: "getPositionFeeGrowth",
+    // Name bumped to start a fresh cache: the previous implementation swallowed
+    // 403/429 as if it were a revert, so entries written while the RPC quota was
+    // spent cannot be trusted. Cheap to refetch. (getPoolFeeGrowth keeps its
+    // name — it threw instead of swallowing, so its large cache is clean.)
+    name: "getPositionFeeGrowthV2",
     input: S.schema({
       positionManager: S.string,
       tokenId: S.string,
