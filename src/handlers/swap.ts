@@ -1,7 +1,7 @@
 // Pool Swap: largest handler. Updates pool/factory/token aggregates, recomputes
 // prices and derivedETH, creates a Swap entity, refreshes feeGrowthGlobal via
 // RPC, and walks any tick-crossings to refresh fee-growth-outside on each.
-import { BigDecimal, indexer, type Swap } from "envio";
+import { BigDecimal, indexer, type EvmOnEventContext, type Swap } from "envio";
 import { getChainConfig } from "../utils/chains.js";
 import { FACTORY_ADDRESS, ONE_BI, ZERO_BD, ZERO_BI } from "../utils/constants.js";
 import { bigDecimalAbs, convertTokenToDecimal, safeDiv } from "../utils/index.js";
@@ -293,7 +293,7 @@ indexer.onEvent(
 );
 
 type TickWalkArgs = {
-  context: Parameters<Parameters<typeof indexer.onEvent>[1]>[0]["context"];
+  context: EvmOnEventContext;
   poolAddress: string;
   poolId: string;
   feeTier: bigint;

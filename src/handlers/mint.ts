@@ -1,6 +1,6 @@
 // Pool Mint: creates Mint entity, updates pool/factory/token TVL (no current
 // fee accounting), creates/updates Tick entities, and refreshes interval data.
-import { indexer, type Mint, type Tick } from "envio";
+import { indexer, type EvmOnEventContext, type Mint, type Tick } from "envio";
 import { FACTORY_ADDRESS, ONE_BI } from "../utils/constants.js";
 import { calculateAmountUSD } from "../utils/pricing.js";
 import { convertTokenToDecimal } from "../utils/index.js";
@@ -169,7 +169,7 @@ indexer.onEvent(
 );
 
 async function refreshTickFeeVars(
-  context: Parameters<Parameters<typeof indexer.onEvent>[1]>[0]["context"],
+  context: EvmOnEventContext,
   poolAddress: string,
   tick: Tick,
   timestamp: number,
