@@ -1,6 +1,6 @@
 import { createEffect, S } from "envio";
 import { parseAbi } from "viem";
-import { getKatanaClient } from "./client.js";
+import { RPC_RATE, getKatanaClient, isRevert, withRetry } from "./client.js";
 
 // `positions(tokenId)` returns a 12-tuple; we only need the two fee-growth
 // fields. Static metadata (token0/token1/fee/tickLower/tickUpper) is derived
@@ -26,18 +26,20 @@ export const getPositionFeeGrowth = createEffect(
       }),
     ),
     cache: true,
-    rateLimit: false,
+    rateLimit: { calls: RPC_RATE.positionFeeGrowth, per: "second" },
   },
   async ({ input }) => {
+    const client = getKatanaClient();
     try {
-      const client = getKatanaClient();
-      const r = (await client.readContract({
-        address: input.positionManager as `0x${string}`,
-        abi: POSITION_ABI,
-        functionName: "positions",
-        args: [BigInt(input.tokenId)],
-        blockNumber: BigInt(input.blockNumber),
-      })) as readonly [
+      const r = (await withRetry(() =>
+        client.readContract({
+          address: input.positionManager as `0x${string}`,
+          abi: POSITION_ABI,
+          functionName: "positions",
+          args: [BigInt(input.tokenId)],
+          blockNumber: BigInt(input.blockNumber),
+        }),
+      )) as readonly [
         bigint, string, string, string, number,
         number, number, bigint, bigint, bigint, bigint, bigint,
       ];
@@ -46,8 +48,12 @@ export const getPositionFeeGrowth = createEffect(
         feeGrowthInside0LastX128: r[8].toString(),
         feeGrowthInside1LastX128: r[9].toString(),
       };
-    } catch {
-      return null;
+    } catch (err) {
+      // A deleted or never-minted position reverts — a real answer, mapped to
+      // null. A transport failure is not, so it must propagate rather than be
+      // cached as missing fee growth.
+      if (isRevert(err)) return null;
+      throw err;
     }
   },
 );

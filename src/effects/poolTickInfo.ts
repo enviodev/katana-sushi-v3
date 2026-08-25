@@ -1,6 +1,6 @@
 import { createEffect, S } from "envio";
 import { parseAbi } from "viem";
-import { getKatanaClient } from "./client.js";
+import { RPC_RATE, getKatanaClient, isRevert, withRetry } from "./client.js";
 
 // `ticks(tick)` returns:
 //   (uint128 liquidityGross, int128 liquidityNet,
@@ -27,25 +27,32 @@ export const getPoolTickInfo = createEffect(
       }),
     ),
     cache: true,
-    rateLimit: false,
+    rateLimit: { calls: RPC_RATE.poolTickInfo, per: "second" },
   },
   async ({ input }) => {
+    const client = getKatanaClient();
     try {
-      const client = getKatanaClient();
-      const result = (await client.readContract({
-        address: input.address as `0x${string}`,
-        abi: POOL_ABI,
-        functionName: "ticks",
-        args: [input.tickIdx],
-        blockNumber: BigInt(input.blockNumber),
-      })) as readonly [bigint, bigint, bigint, bigint, bigint, bigint, number, boolean];
+      const result = (await withRetry(() =>
+        client.readContract({
+          address: input.address as `0x${string}`,
+          abi: POOL_ABI,
+          functionName: "ticks",
+          args: [input.tickIdx],
+          blockNumber: BigInt(input.blockNumber),
+        }),
+      )) as readonly [bigint, bigint, bigint, bigint, bigint, bigint, number, boolean];
 
       return {
         feeGrowthOutside0X128: result[2].toString(),
         feeGrowthOutside1X128: result[3].toString(),
       };
-    } catch {
-      return null;
+    } catch (err) {
+      // An uninitialised tick reverts — that is a real answer, and maps to null.
+      // A transport failure is not: persisting it as null would silently write
+      // wrong fee-growth data into a cached entry, so let it propagate once
+      // withRetry has given up.
+      if (isRevert(err)) return null;
+      throw err;
     }
   },
 );

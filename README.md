@@ -36,6 +36,33 @@ indexer itself (HyperSync remains the primary data source). If unset, both
 paths fall back to the public Katana RPC; a dedicated provider (e.g. dRPC,
 Alchemy, Ankr) is recommended for backfill throughput.
 
+### RPC resilience and tuning
+
+The public Katana RPC is layered underneath `ENVIO_KATANA_RPC_URL` as a
+`viem` fallback transport, ranked by observed success rate. When the primary
+endpoint's quota is spent — a metered provider answers *every* request with
+HTTP 403 at that point, rather than slowing down — the client demotes it and
+keeps indexing on the public RPC until the quota resets.
+
+Effect calls retry transient transport failures (403/408/425/429/5xx, timeouts,
+socket resets) with exponential backoff and full jitter. Contract **reverts**
+are not retried: they are a real answer and map to `null`. That distinction
+matters — treating a 403 as a revert would silently persist wrong fee-growth
+data into a cached entry.
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `ENVIO_RPC_MAX_ATTEMPTS` | `6` | Attempts before an RPC failure is raised |
+| `ENVIO_RPC_BASE_DELAY_MS` | `250` | Backoff base; ceiling doubles per attempt |
+| `ENVIO_RPC_RATE_FEE_GROWTH` | `30` | `getPoolFeeGrowth` calls/second |
+| `ENVIO_RPC_RATE_TICK_INFO` | `20` | `getPoolTickInfo` calls/second |
+| `ENVIO_RPC_RATE_POSITION` | `10` | `getPositionFeeGrowth` calls/second |
+| `ENVIO_RPC_RATE_TOKEN_META` | `5` | `getTokenMetadata` calls/second |
+
+The defaults are sized for the public RPC, which serves ~50 concurrent archive
+`eth_call`s cleanly and begins returning 429 above ~100. Raise them when a
+dedicated endpoint with real headroom is in front.
+
 ### Fee-growth flag
 
 `ENVIO_FETCH_FEE_GROWTH` (**default: on**) controls whether the indexer makes
