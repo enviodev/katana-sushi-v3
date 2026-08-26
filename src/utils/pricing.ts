@@ -2,13 +2,17 @@ import { BigDecimal, type Bundle, type EvmOnEventContext, type Token } from "env
 import { ONE_BD, Q192, ZERO_BD, ZERO_BI } from "./constants.js";
 import { clampBD, exponentToBigDecimal, isAddressInList, safeDiv } from "./index.js";
 
+// Q192 never changes, so stringifying it and reparsing a BigDecimal on every
+// price conversion was pure waste — this runs once per Swap.
+const Q192_BD = new BigDecimal(Q192.toString());
+
 export function sqrtPriceX96ToTokenPrices(
   sqrtPriceX96: bigint,
   token0: Token,
   token1: Token,
 ): [BigDecimal, BigDecimal] {
   const num = new BigDecimal((sqrtPriceX96 * sqrtPriceX96).toString());
-  const denom = new BigDecimal(Q192.toString());
+  const denom = Q192_BD;
   // No .dp(N) here: the reference Uniswap indexer applies .dp(4) at this
   // point but it catastrophically rounds prices < 1 (e.g. 0.000434 → 0.0004),
   // producing an 8% bias on every ETH/USD figure downstream. We instead rely
@@ -48,35 +52,58 @@ export async function findNativePerToken(
     return safeDiv(ONE_BD, bundle.ethPriceUSD);
   }
 
-  const pools = await Promise.all(
-    token.whitelistPools.map((id) => context.Pool.get(id)),
-  );
+  const poolIds = token.whitelistPools;
+  if (poolIds.length === 0) return ZERO_BD;
 
-  let largestLiquidityETH = ZERO_BD;
-  let priceSoFar = ZERO_BD;
+  const pools = await Promise.all(poolIds.map((id) => context.Pool.get(id)));
+
+  // Gather the counterpart side of every pool that can contribute, then load
+  // those tokens in ONE batch. The previous shape awaited `Token.get` *inside*
+  // the loop, so a token in N whitelist pools cost N sequential awaits — and
+  // this runs twice per Swap, on the hottest path in the indexer. Same pools,
+  // same order, same comparisons; only the loads are batched.
+  const candidates: {
+    ethLockedBase: BigDecimal;
+    price: BigDecimal;
+    counterpartId: string;
+  }[] = [];
 
   for (const pool of pools) {
     if (!pool || pool.liquidity <= ZERO_BI) continue;
 
     if (pool.token0_id === token.id) {
-      const t1 = await context.Token.get(pool.token1_id);
-      if (t1) {
-        const ethLocked = pool.totalValueLockedToken1.times(t1.derivedETH);
-        if (ethLocked.gt(largestLiquidityETH) && ethLocked.gt(minimumNativeLocked)) {
-          largestLiquidityETH = ethLocked;
-          priceSoFar = pool.token1Price.times(t1.derivedETH);
-        }
-      }
+      candidates.push({
+        ethLockedBase: pool.totalValueLockedToken1,
+        price: pool.token1Price,
+        counterpartId: pool.token1_id,
+      });
     }
     if (pool.token1_id === token.id) {
-      const t0 = await context.Token.get(pool.token0_id);
-      if (t0) {
-        const ethLocked = pool.totalValueLockedToken0.times(t0.derivedETH);
-        if (ethLocked.gt(largestLiquidityETH) && ethLocked.gt(minimumNativeLocked)) {
-          largestLiquidityETH = ethLocked;
-          priceSoFar = pool.token0Price.times(t0.derivedETH);
-        }
-      }
+      candidates.push({
+        ethLockedBase: pool.totalValueLockedToken0,
+        price: pool.token0Price,
+        counterpartId: pool.token0_id,
+      });
+    }
+  }
+
+  if (candidates.length === 0) return ZERO_BD;
+
+  const counterparts = await Promise.all(
+    candidates.map((c) => context.Token.get(c.counterpartId)),
+  );
+
+  let largestLiquidityETH = ZERO_BD;
+  let priceSoFar = ZERO_BD;
+
+  for (let i = 0; i < candidates.length; i++) {
+    const counterpart = counterparts[i];
+    if (!counterpart) continue;
+    const c = candidates[i]!;
+    const ethLocked = c.ethLockedBase.times(counterpart.derivedETH);
+    if (ethLocked.gt(largestLiquidityETH) && ethLocked.gt(minimumNativeLocked)) {
+      largestLiquidityETH = ethLocked;
+      priceSoFar = c.price.times(counterpart.derivedETH);
     }
   }
   return clampBD(priceSoFar);

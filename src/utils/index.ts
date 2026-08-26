@@ -22,26 +22,39 @@ export function clampBD(x: BigDecimal): BigDecimal {
   return x.precision(BD_SIGNIFICANT_FIGURES);
 }
 
+// The address lists are stable module-level config arrays, so the lowercased
+// Set is built once per array and reused. The previous shape lowercased every
+// entry on every call — 22 allocations per whitelist check, twice per Swap.
+const lowercasedListCache = new WeakMap<readonly string[], Set<string>>();
 export function isAddressInList(address: string, list: string[]): boolean {
-  const a = address.toLowerCase();
-  for (const item of list) {
-    if (a === item.toLowerCase()) return true;
+  let set = lowercasedListCache.get(list);
+  if (set === undefined) {
+    set = new Set(list.map((item) => item.toLowerCase()));
+    lowercasedListCache.set(list, set);
   }
-  return false;
+  return set.has(address.toLowerCase());
 }
 
+// Memoised: there are only a handful of distinct token decimals, and this used
+// to build the digit string one character at a time on every call — twice per
+// price conversion, twice more per token amount conversion.
+const exponentCache = new Map<bigint, BigDecimal>();
 export function exponentToBigDecimal(decimals: bigint): BigDecimal {
-  let s = "1";
-  for (let i = 0n; i < decimals; i++) s += "0";
-  return new BigDecimal(s);
+  let cached = exponentCache.get(decimals);
+  if (cached === undefined) {
+    cached = new BigDecimal("1" + "0".repeat(Number(decimals)));
+    exponentCache.set(decimals, cached);
+  }
+  return cached;
 }
 
 export function safeDiv(num: BigDecimal, denom: BigDecimal): BigDecimal {
   return denom.eq(ZERO_BD) ? ZERO_BD : num.div(denom);
 }
 
+const NEGATIVE_ONE_BD = new BigDecimal("-1");
 export function bigDecimalAbs(x: BigDecimal): BigDecimal {
-  return x.lt(ZERO_BD) ? x.times(new BigDecimal("-1")) : x;
+  return x.lt(ZERO_BD) ? x.times(NEGATIVE_ONE_BD) : x;
 }
 
 export function convertTokenToDecimal(
