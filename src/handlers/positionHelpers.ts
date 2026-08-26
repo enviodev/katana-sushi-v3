@@ -35,19 +35,19 @@ export async function getOrCreatePosition(
   // that is the mint that created this position. NPM always calls pool.mint()
   // *before* emitting the corresponding Transfer/IncreaseLiquidity, so the
   // Mint entity is already in DB by the time we get here.
-  const cfg = getChainConfig(context.chain.id);
-  const npmAddress = cfg.positionManagerAddress.toLowerCase();
-
-  const mintsInTx = await context.Mint.getWhere({
-    transaction_id: { _eq: transaction.id },
-  });
-  const npmMints = mintsInTx.filter((m) => m.sender?.toLowerCase() === npmAddress);
-
-  // Sequential mints in one tx (e.g. batch position creation) are matched
-  // best-effort by order. The NPM increments tokenId monotonically and emits
-  // Pool.Mints in the same order, so picking the first unclaimed mint usually
-  // matches the first unclaimed Transfer/IncreaseLiquidity.
-  const poolMint = npmMints[0];
+  // One keyed lookup rather than a scan. This used to be
+  // `Mint.getWhere({transaction_id})` followed by filtering for the NPM sender,
+  // which ran from every NPM Collect, Transfer, IncreaseLiquidity and
+  // DecreaseLiquidity — ~3.15M events, and 196s of a 2,450s sync, the largest
+  // remaining entity load after Transaction.get was removed. The Mint handler
+  // now records the first NPM-originated mint per transaction as TxNpmMint, so
+  // the selection is made once at write time instead of rescanned per event.
+  //
+  // Same choice as before: TxNpmMint keeps the FIRST NPM mint in the
+  // transaction, which is what `npmMints[0]` selected. Sequential mints in one
+  // tx (batch position creation) are still matched best-effort by order — the
+  // NPM increments tokenId monotonically and emits Pool.Mints in the same order.
+  const poolMint = await context.TxNpmMint.get(transaction.id);
   if (!poolMint) {
     context.log.warn(
       `No NPM Pool.Mint found in tx ${transaction.id} for position ${id} — ` +

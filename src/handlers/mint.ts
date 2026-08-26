@@ -17,6 +17,7 @@ import { createTick } from "../utils/tick.js";
 import { loadOrCreateTransaction } from "../utils/transaction.js";
 import { FETCH_FEE_GROWTH } from "../utils/flags.js";
 import { getPoolTickInfo } from "../effects/poolTickInfo.js";
+import { getChainConfig } from "../utils/chains.js";
 
 indexer.onEvent(
   { contract: "UniswapV3Pool", event: "Mint", wildcard: true },
@@ -129,6 +130,22 @@ indexer.onEvent(
       logIndex: BigInt(event.logIndex),
     };
     context.Mint.set(mint);
+
+    // Record the first NPM-originated mint of this transaction so the position
+    // handlers can find it with a keyed get instead of scanning Mint by
+    // transaction. Guarded on absence to keep "first", matching the
+    // `npmMints[0]` the getWhere-based code selected.
+    if (mint.sender === getChainConfig(context.chain.id).positionManagerAddress.toLowerCase()) {
+      const already = await context.TxNpmMint.get(transaction.id);
+      if (!already) {
+        context.TxNpmMint.set({
+          id: transaction.id,
+          pool_id: pool.id,
+          tickLower: event.params.tickLower,
+          tickUpper: event.params.tickUpper,
+        });
+      }
+    }
 
     // Tick entities — load or initialize, then apply liquidity deltas.
     const lowerTick: Tick = lowerTickRO

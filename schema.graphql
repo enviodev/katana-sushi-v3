@@ -168,6 +168,25 @@ type Transaction {
   collects: [Collect!]! @derivedFrom(field: "transaction")
 }
 
+# Points a transaction hash at the FIRST NonfungiblePositionManager-originated
+# Pool.Mint in that transaction.
+#
+# Position metadata is derived from the pool.mint() that the NPM makes just
+# before emitting Transfer/IncreaseLiquidity, and finding it used to mean
+# `Mint.getWhere({transaction_id})` — a scan run from every NPM Collect,
+# Transfer, IncreaseLiquidity and DecreaseLiquidity, ~3.15M events, costing
+# 196s of a 2,450s sync. Writing this pointer once per NPM mint turns that into
+# a single keyed lookup.
+#
+# Only the first NPM mint per transaction is recorded, which is what the
+# previous code selected (`npmMints[0]`) for batched position creation.
+type TxNpmMint {
+  id: ID!
+  pool: Pool!
+  tickLower: BigInt!
+  tickUpper: BigInt!
+}
+
 type Mint {
   id: ID!
   transaction: Transaction! @index
