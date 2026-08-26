@@ -18,6 +18,7 @@ import {
   updateTokenDayData,
   updateTokenHourData,
   updateUniswapDayData,
+  preloadIntervalData,
 } from "../utils/intervalUpdates.js";
 import { feeTierToTickSpacing } from "../utils/tick.js";
 import { loadOrCreateTransaction } from "../utils/transaction.js";
@@ -44,6 +45,33 @@ indexer.onEvent(
       context.Token.get(poolRO.token1_id),
     ]);
     if (!token0RO || !token1RO) return;
+
+    // Preload phase: issue the rest of this handler's reads as one batch, then
+    // stop. Storage writes are ignored during preload, so everything below —
+    // the pricing, the TVL recomputation, the interval aggregation — would be
+    // computed and thrown away. Swap is ~65% of all events, so running that
+    // arithmetic twice per event is the single largest avoidable cost left.
+    // This is the documented pattern: "exit early from the Preload Phase after
+    // loading required data".
+    //
+    // findNativePerToken is called with the as-read tokens rather than the
+    // updated ones. The values it returns are discarded here; what matters is
+    // that it walks the same whitelistPools and counterpart tokens, which
+    // depend only on ids, so the same rows get warmed either way.
+    if (context.isPreload) {
+      await Promise.all([
+        findNativePerToken(context, token0RO, bundleRO, cfg.wrappedNativeAddress, cfg.stablecoinAddresses, cfg.minimumNativeLocked),
+        findNativePerToken(context, token1RO, bundleRO, cfg.wrappedNativeAddress, cfg.stablecoinAddresses, cfg.minimumNativeLocked),
+        preloadIntervalData(event.block.timestamp, poolId, poolRO.token0_id, poolRO.token1_id, context),
+        // The bundle refresh below reads the stablecoin/native pool.
+        getNativePriceInUSD(context, cfg.stablecoinWrappedNativePoolId, cfg.stablecoinIsToken0),
+      ]);
+      // Tick rows for the crossing loop are deliberately not warmed: that loop
+      // only runs when ENVIO_FETCH_FEE_GROWTH is on, and which ticks it visits
+      // depends on the price computed below. With the flag off this costs
+      // nothing; with it on those reads fall back to loading serially.
+      return;
+    }
 
     const oldTick = poolRO.tick;
 

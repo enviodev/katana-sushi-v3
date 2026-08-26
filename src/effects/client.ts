@@ -132,11 +132,16 @@ export async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
 // 5/s a burst queued up behind the limiter and stalled the entire indexer:
 // during the 94840c0 sync, CPU fell to 0.04 cores while 223 calls sat in
 // `envio_effect_queue`, twice, for about six minutes total — roughly 1,078 s
-// across the run. Raising it to 50/s brings that down to ~110 s while still
-// capping concurrency, and the retry/fallback in withRetry absorbs any 429.
+// across the run. 50/s brought that to ~110 s; 100/s brings it to ~55 s while
+// still capping concurrency, and the retry/fallback in withRetry absorbs a 429.
+//
+// The cap matters less than it looks now: the effect cache persists and is
+// restored at boot, so on a redeploy the ~5,389 tokens are already resolved and
+// only genuinely new ones reach the RPC. This is headroom for those bursts, not
+// a number the steady state depends on.
 export const RPC_RATE = {
   poolFeeGrowth: Number(process.env.ENVIO_RPC_RATE_FEE_GROWTH ?? 30),
   poolTickInfo: Number(process.env.ENVIO_RPC_RATE_TICK_INFO ?? 20),
   positionFeeGrowth: Number(process.env.ENVIO_RPC_RATE_POSITION ?? 10),
-  tokenMetadata: Number(process.env.ENVIO_RPC_RATE_TOKEN_META ?? 50),
+  tokenMetadata: Number(process.env.ENVIO_RPC_RATE_TOKEN_META ?? 100),
 } as const;

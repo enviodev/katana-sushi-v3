@@ -15,14 +15,54 @@ import {
 } from "envio";
 import { ONE_BI, ZERO_BD, ZERO_BI } from "./constants.js";
 
+// Single source of truth for interval-data ids. The update functions below and
+// `preloadIntervalData` both build ids from these, so the warm path cannot
+// drift from the read path — if it did, the preload would silently miss rows
+// and the processing pass would load them one at a time.
+export const dayIndexOf = (timestamp: number): number => Math.floor(timestamp / 86400);
+export const hourIndexOf = (timestamp: number): number => Math.floor(timestamp / 3600);
+
+export const uniswapDayDataId = (timestamp: number): string => dayIndexOf(timestamp).toString();
+export const poolDayDataId = (poolId: string, timestamp: number): string =>
+  `${poolId}-${dayIndexOf(timestamp)}`;
+export const poolHourDataId = (poolId: string, timestamp: number): string =>
+  `${poolId}-${hourIndexOf(timestamp)}`;
+export const tokenDayDataId = (tokenId: string, timestamp: number): string =>
+  `${tokenId}-${dayIndexOf(timestamp)}`;
+export const tokenHourDataId = (tokenId: string, timestamp: number): string =>
+  `${tokenId}-${hourIndexOf(timestamp)}`;
+
+// Warm every interval row a pool-level handler will read, as one batch.
+//
+// Used from the preload phase, where storage writes are ignored: issuing the
+// reads is the entire point of that pass, and the arithmetic that normally
+// follows them would be thrown away.
+export async function preloadIntervalData(
+  timestamp: number,
+  poolId: string,
+  token0Id: string,
+  token1Id: string,
+  context: EvmOnEventContext,
+): Promise<void> {
+  await Promise.all([
+    context.UniswapDayData.get(uniswapDayDataId(timestamp)),
+    context.PoolDayData.get(poolDayDataId(poolId, timestamp)),
+    context.PoolHourData.get(poolHourDataId(poolId, timestamp)),
+    context.TokenDayData.get(tokenDayDataId(token0Id, timestamp)),
+    context.TokenDayData.get(tokenDayDataId(token1Id, timestamp)),
+    context.TokenHourData.get(tokenHourDataId(token0Id, timestamp)),
+    context.TokenHourData.get(tokenHourDataId(token1Id, timestamp)),
+  ]);
+}
+
 export async function updateUniswapDayData(
   timestamp: number,
   factory: Factory,
   context: EvmOnEventContext,
 ): Promise<UniswapDayData> {
-  const dayNum = Math.floor(timestamp / 86400);
+  const dayNum = dayIndexOf(timestamp);
   const dayStart = dayNum * 86400;
-  const id = dayNum.toString();
+  const id = uniswapDayDataId(timestamp);
   const existing = await context.UniswapDayData.get(id);
   const updated: UniswapDayData = {
     id,
@@ -43,9 +83,9 @@ export async function updatePoolDayData(
   pool: Pool,
   context: EvmOnEventContext,
 ): Promise<PoolDayData> {
-  const dayID = Math.floor(timestamp / 86400);
+  const dayID = dayIndexOf(timestamp);
   const dayStart = dayID * 86400;
-  const id = `${pool.id}-${dayID}`;
+  const id = poolDayDataId(pool.id, timestamp);
   const existing = await context.PoolDayData.get(id);
 
   const open = existing?.open ?? pool.token0Price;
@@ -85,9 +125,9 @@ export async function updatePoolHourData(
   pool: Pool,
   context: EvmOnEventContext,
 ): Promise<PoolHourData> {
-  const hourIndex = Math.floor(timestamp / 3600);
+  const hourIndex = hourIndexOf(timestamp);
   const hourStart = hourIndex * 3600;
-  const id = `${pool.id}-${hourIndex}`;
+  const id = poolHourDataId(pool.id, timestamp);
   const existing = await context.PoolHourData.get(id);
 
   const open = existing?.open ?? pool.token0Price;
@@ -128,9 +168,9 @@ export async function updateTokenDayData(
   bundle: Bundle,
   context: EvmOnEventContext,
 ): Promise<TokenDayData> {
-  const dayID = Math.floor(timestamp / 86400);
+  const dayID = dayIndexOf(timestamp);
   const dayStart = dayID * 86400;
-  const id = `${token.id}-${dayID}`;
+  const id = tokenDayDataId(token.id, timestamp);
   const tokenPrice = token.derivedETH.times(bundle.ethPriceUSD);
   const existing = await context.TokenDayData.get(id);
 
@@ -166,9 +206,9 @@ export async function updateTokenHourData(
   bundle: Bundle,
   context: EvmOnEventContext,
 ): Promise<TokenHourData> {
-  const hourIndex = Math.floor(timestamp / 3600);
+  const hourIndex = hourIndexOf(timestamp);
   const hourStart = hourIndex * 3600;
-  const id = `${token.id}-${hourIndex}`;
+  const id = tokenHourDataId(token.id, timestamp);
   const tokenPrice = token.derivedETH.times(bundle.ethPriceUSD);
   const existing = await context.TokenHourData.get(id);
 
