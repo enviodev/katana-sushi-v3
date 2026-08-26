@@ -15,7 +15,7 @@ import {
 import { loadOrCreateTransaction } from "../utils/transaction.js";
 
 indexer.onEvent(
-  { contract: "UniswapV3Pool", event: "CollectProtocol" },
+  { contract: "UniswapV3Pool", event: "CollectProtocol", wildcard: true },
   async ({ event, context }) => {
     const cfg = getChainConfig(context.chain.id);
     const poolId = event.srcAddress.toLowerCase();

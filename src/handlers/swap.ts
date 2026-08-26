@@ -26,7 +26,7 @@ import { getPoolFeeGrowth } from "../effects/poolFeeGrowth.js";
 import { getPoolTickInfo } from "../effects/poolTickInfo.js";
 
 indexer.onEvent(
-  { contract: "UniswapV3Pool", event: "Swap" },
+  { contract: "UniswapV3Pool", event: "Swap", wildcard: true },
   async ({ event, context }) => {
     const chainId = context.chain.id;
     const cfg = getChainConfig(chainId);

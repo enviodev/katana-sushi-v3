@@ -2,7 +2,7 @@
 import { indexer, type SetProtocolFeeEvent } from "envio";
 
 indexer.onEvent(
-  { contract: "UniswapV3Pool", event: "SetFeeProtocol" },
+  { contract: "UniswapV3Pool", event: "SetFeeProtocol", wildcard: true },
   async ({ event, context }) => {
     const poolId = event.srcAddress.toLowerCase();
     const poolRO = await context.Pool.get(poolId);

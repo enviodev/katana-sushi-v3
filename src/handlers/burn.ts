@@ -18,7 +18,7 @@ import { FETCH_FEE_GROWTH } from "../utils/flags.js";
 import { getPoolTickInfo } from "../effects/poolTickInfo.js";
 
 indexer.onEvent(
-  { contract: "UniswapV3Pool", event: "Burn" },
+  { contract: "UniswapV3Pool", event: "Burn", wildcard: true },
   async ({ event, context }) => {
     const poolId = event.srcAddress.toLowerCase();
     const lowerTickId = `${poolId}#${event.params.tickLower.toString()}`;

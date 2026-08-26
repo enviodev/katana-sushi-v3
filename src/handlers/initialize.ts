@@ -12,7 +12,7 @@ import {
 } from "../utils/intervalUpdates.js";
 
 indexer.onEvent(
-  { contract: "UniswapV3Pool", event: "Initialize" },
+  { contract: "UniswapV3Pool", event: "Initialize", wildcard: true },
   async ({ event, context }) => {
     const chainId = context.chain.id;
     const cfg = getChainConfig(chainId);

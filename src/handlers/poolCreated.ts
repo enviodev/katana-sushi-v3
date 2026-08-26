@@ -6,12 +6,19 @@ import { ADDRESS_ZERO, FACTORY_ADDRESS, ZERO_BD, ZERO_BI } from "../utils/consta
 import { isAddressInList } from "../utils/index.js";
 import { getTokenMetadata } from "../effects/tokenMetadata.js";
 
-indexer.contractRegister(
-  { contract: "UniswapV3Factory", event: "PoolCreated" },
-  async ({ event, context }) => {
-    context.chain.UniswapV3Pool.add(event.params.pool);
-  },
-);
+// No contractRegister here on purpose. UniswapV3Pool events are matched by
+// signature across every address (`wildcard: true` on each pool handler), so
+// there is nothing to register — and registering was what made this expensive.
+// Each of the 5,525 pools added an indexed address and forced partition splits:
+// the 2026-08-25 backfill issued 113,557 fetch queries, many returning 2-6
+// events over 20M-block ranges, and stalled for ~10 minutes while ~2,500 pools
+// registered at once.
+//
+// Safe because every UniswapV3Pool handler already returns early when the Pool
+// entity is unknown, so an event from a foreign contract that happens to share
+// an event signature costs one lookup and is dropped. Sampling Katana confirmed
+// this is close to free: of 487 Swap logs across five block windows, 100% came
+// from pools this indexer already tracks.
 
 indexer.onEvent(
   { contract: "UniswapV3Factory", event: "PoolCreated" },

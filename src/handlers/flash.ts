@@ -8,7 +8,7 @@ import { FETCH_FEE_GROWTH } from "../utils/flags.js";
 import { getPoolFeeGrowth } from "../effects/poolFeeGrowth.js";
 
 indexer.onEvent(
-  { contract: "UniswapV3Pool", event: "Flash" },
+  { contract: "UniswapV3Pool", event: "Flash", wildcard: true },
   async ({ event, context }) => {
     const poolId = event.srcAddress.toLowerCase();
     const [poolRO, bundleRO] = await Promise.all([
