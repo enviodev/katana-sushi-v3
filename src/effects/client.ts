@@ -122,12 +122,21 @@ export async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 // Per-effect call budgets. The public Katana RPC serves ~50 concurrent archive
-// eth_calls cleanly and starts returning 429 above ~100, so these are set to
-// stay well inside that envelope. Tunable without a code change because the
-// right value depends on which endpoint is actually in front of them.
+// eth_calls cleanly and starts returning 429 above ~100, so these stay inside
+// that envelope. Tunable without a code change because the right value depends
+// on which endpoint is actually in front of them.
+//
+// tokenMetadata was 5/s and that was badly wrong. It is bounded work — one call
+// per *distinct* token, and the effect is cached — so the whole chain costs
+// ~5,389 calls, no quota risk at all. But pools are created in bursts, and at
+// 5/s a burst queued up behind the limiter and stalled the entire indexer:
+// during the 94840c0 sync, CPU fell to 0.04 cores while 223 calls sat in
+// `envio_effect_queue`, twice, for about six minutes total — roughly 1,078 s
+// across the run. Raising it to 50/s brings that down to ~110 s while still
+// capping concurrency, and the retry/fallback in withRetry absorbs any 429.
 export const RPC_RATE = {
   poolFeeGrowth: Number(process.env.ENVIO_RPC_RATE_FEE_GROWTH ?? 30),
   poolTickInfo: Number(process.env.ENVIO_RPC_RATE_TICK_INFO ?? 20),
   positionFeeGrowth: Number(process.env.ENVIO_RPC_RATE_POSITION ?? 10),
-  tokenMetadata: Number(process.env.ENVIO_RPC_RATE_TOKEN_META ?? 5),
+  tokenMetadata: Number(process.env.ENVIO_RPC_RATE_TOKEN_META ?? 50),
 } as const;
