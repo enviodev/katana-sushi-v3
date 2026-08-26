@@ -88,6 +88,15 @@ chains:
     rpc:
       - url: ${ENVIO_KATANA_RPC_URL:-https://rpc.katana.network}
         for: fallback
+      # Second entry on purpose. This list feeds HyperIndex's own blockLoader,
+      # which is separate from the viem client in src/effects/ — the fallback
+      # transport there does not cover it. At chain tip the blockLoader polls
+      # `getBlock` against this list, so with only a metered endpoint listed a
+      # spent quota became `LazyLoader.LoaderTimeout: Query took longer than 300
+      # seconds` -> unhandled promise rejection -> restart (6 times on
+      # 2026-08-25, after the backfill completed).
+      - url: https://rpc.katana.network
+        for: fallback
     contracts:
       - name: UniswapV3Factory
         address:
