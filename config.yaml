@@ -2,7 +2,7 @@
 name: katana-sushi-v3
 disable_default_cross_chain: true # recommended; default in HyperIndex v4
 rollback_on_reorg: true
-
+ 
 contracts:
   - name: UniswapV3Factory
     events:
